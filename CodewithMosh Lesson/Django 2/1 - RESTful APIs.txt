@@ -1,0 +1,422 @@
+API - Application Programming Interface
+
+ - instead of the admin site, will setup APIs that can be used in applications
+ - endpoints that can be called - like buttons
+
+REST - Representational State Transfer
+    - helps build fast, scalable, reliable, easy to understand, easy to exchange
+
+    - 3 concepts:
+        resources, representations, HTTP methods
+
+RESOURCES
+
+    - resources are the content (product, collection, order, etc)
+
+    - URL - Uniform Resource Locator
+        - eg. jbuy.com/products/1
+
+    - a resource can have more than one resource
+        - jbuy.com/products/1/reviews/1
+
+    -note that resources shouldnt be nested too deep - complex urls
+    - the url pattern is part of REST - makes for easy to use APIs
+
+RESOURCE REPRESENTATIONS
+
+- representation style
+    - HTML, XML, JSON
+
+    JSON:
+        {
+            "book": "LOTR",
+            "pokemon": [krabby, mewtwo, pikachu],
+            "keys": {bottle: 'water', box: 'cookies'}
+        }
+
+
+HTTP METHODS
+    - HTTP requests:
+        GET, POST, PUT, PATCH, DELETE
+
+    POST
+        - create a new object
+    
+    PUT/PATCH for sending new info
+        - PUT will update all attributes
+        - PATCH will update specfiic attr
+
+INSTALLING DJANGO REST FRAMEWORK
+
+    - Django Rest is a separate framework that sits on top of Django
+
+    pipenv install djangorestframework
+
+    Install the app in settings
+        'rest_framework',
+
+CREATING API VIEWS
+
+    - create API views in an app using urls.py and views.py
+
+    - views.py will deliver the content to be viewed over https
+        - a new view is created called product_list
+
+            from django.shortcuts import render
+            from django.http import HttpResponse
+
+            # Create your views here.
+            def product_list(request):
+                return HttpResponse('ok')
+
+    - urls.py sets the routing for urls to views
+        - storefront has the primary urlpatterns for this project
+
+            urlpatterns = [
+                path('admin/', admin.site.urls),
+                path('playground/', include('playground.urls')),
+                path('store/', include('store.urls')),              # created a new pattern for "store/" app
+                path('__debug__/', include(debug_toolbar.urls)),
+            ]
+
+        - in store app
+                from django.urls import path
+                from . import views
+
+                # URLConf
+                urlpatterns = [
+                    path('products/', views.product_list),  # new view is created for the product_list view
+                ]
+
+NOTE: instead of using httpresponse - we use rest_framework's response class
+    - in store > views.py
+
+        from rest_framework.decorators import api_view
+        from rest_framework.response import Response
+
+    @api_view()                     # turns the request into an instance of the request class from "rest_framework"
+    def product_list(request):
+        return Response('ok')       # instead of HttpResponse - use Response
+
+    - when accessing this view in browser, it presents browsable API
+        - using the API itself will only present the requested data
+            - selecting "json" from the drop down will simulate this
+
+        @api_view()
+    def product_detail(request, id):    - allows id to be accepted with the request
+        return Response('ok')
+
+    path('products/<int:id>/', views.product_detail)    # adding "int:id" limits the accepted url
+        - only an integer will be accepted for id
+
+CREATING SERIALIZERS
+    - want to present objects
+        - convert django objects to json objects
+        - us python to render json objects using Serializers
+
+    - created serializers.py in store
+        from rest_framework import serializers
+
+        class ProductSerializer(serializers.Serializer):
+            id = serializers.IntegerField()
+            title = serializers.CharField(max_length=255)
+            unit_price = serializers.DecimalField(max_digits=6, decimal_places=2)
+
+    fields are assigned to the class in the same way as setting up models
+        - guide: django-rest-framework.org/api-guide/fields/#core_arguments
+
+    Creating the serializers sets up for passing objects through API
+
+SERIALIZING OBJECTS
+
+import into store > views.py
+from .models import Product
+from .serializers import ProductSerializer
+
+@api_view()
+def product_detail(request, id):
+    product = Product.objects.get(pk=id)
+    serializer = ProductSerializer(product) # converts the product object into a dictionary
+    return Response(serializer.data)
+
+serializer is an object of ProductSerializer class (class inherits "serializers.Serializer")
+    - turns the "product" object into a dictionary
+    - dictionary is retrieved by calling "serializer.data"
+
+
+NOTES:
+    Django Rest will automatically converted deicmals to strings
+        - in settings.py
+        REST_FRAMEWORK = {
+            'COERCE_DECIMAL_TO_STRING': False       # prevents decimal fields from being converted to string
+        }
+
+    Also:
+        exception for invalid product id request - should get a 404 response
+            - in views.py
+            - wrap product_details in a try block
+
+        from rest_framework import status
+
+        except Product.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        NVM!
+
+        use django.shortucts module - import get_object_or_404
+
+        def product_detail(request, id):
+        product = get_object_or_404(Product, pk=id)
+        serializer = ProductSerializer(product) # converts the product object into a dictionary
+        return Response(serializer.data)
+
+Update to Product list function
+    def product_list(request):
+        queryset = Product.objects.all()
+        serializer = ProductSerializer(queryset, many=True) # can receive a queryset - to iterate over query, use many
+        return Response(serializer.data)       # instead of HttpResponse - use Response
+
+CREATING CUSTOM SERIALIZER FIELDS
+
+Django Models are the implementation; API Models are interface (user side)
+    - changes can be made to Django Models
+    - API Model must remain stable
+
+Updates to ProductClassSerializer -
+
+class ProductSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    title = serializers.CharField(max_length=255)
+    price = serializers.DecimalField(max_digits=6, decimal_places=2, source='unit_price')   # r
+    price_with_tax = serializers.SerializerMethodField(method_name='calculate_tax') # assignd method to serialize
+
+    - "unit_price" name changed to "price"
+        - in order to do so, reference the unit_price field using "source" parameter
+    - "price with tax" field added
+        - uses a new method - calculate tax
+
+
+    def calculate_tax(self, product: Product):
+        return product.unit_price * Decimal(1.1)
+
+    - calculate tax needs to do multiplication but python is using float
+        import decimal method and wrap the value
+
+SERIALIZING RELATIONSHIPS
+
+Four ways to serialize relationships:
+    - Primary key, String, Nested Object, Hyperlink
+
+options
+
+collection = serializers.Collection.object.all()
+collection = serializers.StringRelatedField()
+
+    if using stringrelatedfield()
+        - the view must be setup to use a select_related - to limit the query velocity
+
+another option is to make a class and create an object of the class
+
+    class CollectionSerializer(serializers.Serializer):
+        id = serializers.IntegerField()
+        title = serializers.CharField(max_length=255)
+
+    - product serializer attribute
+        collection = collection = CollectionSerializer()
+
+can also make a Hyperlink as an endpoint:
+    urls
+        path('collections/<int:pk>/', views.collection_detail)
+
+    hyperlin method requires use of pk in the url and in the view parameters
+        @api_view()
+        def collection_detail(request, pk):
+            return Response('ok')
+
+MODEL SERIALIZERS
+    - so far the serializers created have been repeating the attributes of models
+        - duplicating work
+
+        class ProductSerializer(serializers.ModelSerializer):
+            id = serializers.IntegerField()
+            title = serializers.CharField(max_length=255)
+            price = serializers.DecimalField(max_digits=6, decimal_places=2, source='unit_price')   # r
+            price_with_tax = serializers.SerializerMethodField(method_name='calculate_tax') # assignd method to serialize
+            collection = serializers.HyperlinkedRelatedField(
+                queryset=Collection.objects.all,
+                view_name='collection-detail'
+            )
+
+
+            def calculate_tax(self, product: Product):
+                return product.unit_price * Decimal(1.1).__round__()
+
+    - model serializers can be more efficient
+        -using ModelSerializer - django rest will search for the details provided in 'model' and 'field'
+
+        class ProductSerializer(serializers.ModelSerializer):
+            class Meta:
+                model = Product
+                fields = ['id', 'title', 'unit_price', 'collection']
+
+        -attributes can be overriden by adding attributes within the class
+            eg.
+                collection = serializers.HyperlinkedRelatedField(
+                    queryset=Collection.objects.all,
+                    view_name='collection-detail'
+                )
+    
+    NOTE: fields = '__all__' in theory can be used to grab all fields of a model    
+        - it is bad practice to expose all details - only show the ones which are needed
+
+DESERIALIZING OBJECTS
+    - deserialization happens when data is received from client
+        eg. POST /products - json document received
+
+    @api_view wrapper must be set to accept POST
+        - it receives GET request automatically
+
+    - receiving different request methods requires a new format for views - using if loop
+            if GET and elif POST
+
+        @api_view(['GET','POST'])                                                      # GET and POST parameters set in api_view - format as a list              
+        def product_list(request):
+            if request.method == 'GET':                                                            
+                queryset = Product.objects.select_related('collection').all()
+                serializer = ProductSerializer(queryset, many=True, context={'request': request}) 
+                return Response(serializer.data)       
+            elif request.method == 'POST':                                                              # POST is the new parameter
+                serializer = ProductSerializer(data=request.data)                               # the serializer expects data in the request - and deserializes
+                serializer.validated_data                                                       # data is stored using validated_data method
+                return Response('ok')
+
+    - data must be validated before being used
+
+    - browsable api allows testing api with a box at page bottom
+        - input data in json format
+
+
+DATA VALIDATION
+
+
+        elif request.method == 'POST':
+            serializer = ProductSerializer(data=request.data)
+            if serializer.is_valid():                               # .is_valid() must be called to use .validated_data
+                serializer.validated_data
+                return Response('ok')
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)  
+
+    Cleaner Code:
+        elif request.method == 'POST':
+            serializer = ProductSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)               # raise_exception replace
+            serializer.validated_data
+            return Response('ok')
+
+    used print(serializer.validated_data) - to observe the result
+
+    example of method for validating password (not actually using this)
+        def validate(self, data):
+            if data['password'] != data['confirm_password']:
+                return serializers.ValidationError('Passwords do not match')
+            return data
+
+SAVING OBJECTS
+
+
+    - examples of overriding create(POST) and update(PUT, PATCH) methods
+
+def create(self, validated_data):       # overrides create method - validated_data(the dictionary of the new object)
+        product = Product(**validated_data) # unpack dictionary
+        product.other = 1                   # save the fields
+        product.save()
+        return product
+    
+    def update(self, instance, validated_data):                 # override update method - instance (product object)
+        instance.unit_price = validated_data.get('unit_price')  # specifically in this case updating the unit_price
+        instance.save()
+        return instance
+
+NOTE:
+    updated product list view "POST" response
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    - Updating the Product_List response
+
+    @api_view('GET', 'PUT', 'PATCH')                    # accepting PUT (edit all properties) and PATCH(edit specific properties)
+    def product_detail(request, id):
+        product = get_object_or_404(Product, pk=id)     # moved product object here to be retrieved by if and elif
+        if request.method == "GET":
+            serializer = ProductSerializer(product) # converts the product object into a dictionary
+            return Response(serializer.data)
+        elif request.method == "PUT":
+            serializer = ProductSerializer(product, data=request.data)      # needs to receive the product dictionary from the request
+            serializer.is_valid(raise_exception=True)                       # validate against model
+            serializer.save()                                               # save
+            return Response(serializer.data)                                
+
+
+DELETING OBJECTS
+
+
+    elif request.method == "DELETE":
+        if product.orderitems.count() > 0:                                  # check that there are no orderitem relationship which would cause an error
+            return Response({'error': 'Product associated with order item'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        product.delete()                                                        # simple delete method
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+NOTE: orderitem model - product related_name was changed to orderitems
+    product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='orderitems')
+
+BUILD COLLECTIONS API
+
+    - implement a collections API the same as Product
+
+
+notes:
+    - added related name to collections in Product model
+    collection = models.ForeignKey(Collection, on_delete=models.PROTECT, related_name='products') 
+
+
+    - updated views for collection_list() and collection_detail()
+
+@api_view(['GET', 'POST'])
+def collection_list(request):
+    if request.method == "GET":
+        queryset = Collection.objects.annotate(products_count=Count('products')).all()
+        serializer = CollectionSerializer(queryset, many=True)
+        return Response(serializer.data)
+    elif request.method == "POST":
+        serializer = CollectionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
+def collection_detail(request, id):
+    collection = get_object_or_404(
+        Collection.objects.annotate(
+            products_count=Count('products')), pk=id
+        )
+    if request.method == "GET":
+        serializer = CollectionSerializer(collection)
+        return Response(serializer.data)
+    elif request.method == "PUT":
+        serializer = CollectionSerializer(collection, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+    elif request.method == "DELETE":
+        if collection.products.count() > 0:
+            return Response({'error': 'One or more products exist.'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        collection.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+    - Change in admin page
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            products_count=Count('products')                # name of field is products now - changed relationship name in model
+        )

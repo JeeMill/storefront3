@@ -1,0 +1,301 @@
+DESIGNING THE API
+
+Orders Endpoints
+
+    POST        /orders/        {cartId}        order
+        - open to authenticated users only
+            - user id comes from JSON token in the header
+        - request body includes cartId
+
+    GET         /orders/        {}              order[]
+        - users should only be able to see their own orders
+        - admins should see a list
+
+    GET         /orders/1       {}              order
+        - same restrictions
+
+    PATCH       /orders/1
+
+    DELETE      /orders/1
+
+
+
+GETTING THE ORDERS
+
+- start with a simple foundation and gradually build things up
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    product =  SimpleProductSerializer()
+
+    class Meta:
+        model = OrderItem
+        fields = ['id', 'product', 'unit_price', 'quantity']
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True)
+
+    class Meta:
+        model = Order
+        fields = ['id', 'customer', 'placed_at', 'payment_status', 'items']
+
+
+class OrderViewSet(ModelViewSet):
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+
+
+router.register('orders', viewset=views.OrderViewSet)
+
+
+APPLYING PERMISSIONS
+
+    - Command Query Separation
+        - methods should either:
+            - change the state of the database  (update a price, or quantity, etc.)
+            - query database for an answer (what is this product, how many items in cart, etc.)
+
+
+
+CREATING AN ORDER
+
+    - only need to send cart id to create an order
+
+
+    class CreateOrderSerializer(serializers.Serializer):
+        cart_id = serializers.UUIDField()
+
+        def save(self, **kwargs):
+            print(self.validated_data['cart_id'])
+            print(self.context['user_id'])
+
+            (customer, created) = Customer.objects.get_or_create(user_id=self.context['user_id'])
+            Order.objects.create(customer=customer)
+
+    - modified orderviewset
+
+    class OrderViewSet(ModelViewSet):
+        permission_classes = [IsAuthenticated]
+
+        def get_serializer_class(self):
+            if self.request.method == 'POST':
+                return CreateOrderSerializer
+            return OrderSerializer
+
+        def get_serializer_context(self):
+            return{'user_id': self.request.user.id}
+
+        def get_queryset(self):
+            user = self.request.user
+            
+            if user.is_staff:
+                return Order.objects.all()
+            
+            (customer_id, created) = Customer.objects.only('id').get_or_create(user_id=self.request.user.id)
+            return Order.objects.filter(customer_id=customer_id)
+
+CREATING ORDER ITEMS - Returning Order Items
+
+    - when creating a cart with this implementation - the card id is returned instead of the order object
+        - this is because CreateModelMixin returns the searialized data in the create() function
+
+    - will make a new serializer that returns the order object
+
+    - Serializer updates
+
+    def save(self, **kwargs):
+        with transaction.atomic():                      # with transaction.atomic() ensures that the entire wrapped code runs completely or not at all
+            cart_id = self.validated_data['cart_id']
+
+            (customer, created) = Customer.objects.get_or_create(user_id=self.context['user_id'])
+            order = Order.objects.create(customer=customer)
+
+            cart_items = CartItem.objects \
+                        .select_related('product').filter(cart_id=cart_id)
+            order_items = [
+                OrderItem(
+                    order=order,
+                    product=item.product,
+                    unit_price=item.product.unit_price,
+                    quantity=item.quantity
+                ) for item in cart_items
+            ]
+
+            OrderItem.objects.bulk_create(order_items)  # method for bulk creation of objects
+
+            Cart.objects.filter(pk=cart_id).delete()
+
+            return order                                # serializer will return order based on viewset passing the data
+
+
+    - orderviewset updates
+
+    class OrderViewSet(ModelViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):     # implementing create method from scratch
+        serializer = CrerateOrderSerializer(
+            data=request.data, 
+            context = {'user_id': self.request.user.id} )   # provide context
+        serializer.is_valid(raise_exception=True)
+        order = serializer.save()                   # order data to be serialized
+        serializer = OrderSerializer
+        return Response(serializer.data)
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return CreateOrderSerializer
+        return OrderSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        
+        if user.is_staff:
+            return Order.objects.all()
+        
+        (customer_id, created) = Customer.objects.only('id').get_or_create(user_id=self.request.user.id)
+        return Order.objects.filter(customer_id=customer_id)
+
+
+DATA VALIDATION
+
+- added validation to CreateOrderSerializer
+    - validates that cart exists and is not empty
+
+class CreateOrderSerializer(serializers.Serializer):
+    cart_id = serializers.UUIDField()
+
+    def validate_cart_id(self, cart_id):
+        if not Cart.objects.filter(pk=cart_id).exists():
+            raise serializers.ValidationError('No cart with given ID found.')
+        if CartItem.objects.filter(cart=cart_id).count() == 0:
+            raise serializers.ValidationError('Cart is empty.')
+        return cart_id
+
+
+
+
+REVISITING THE PERMISSIONS
+
+    - deleting orders functions
+        - updated permissions methods and http_method_names list on OrderViewSet
+
+
+class OrderViewSet(ModelViewSet):
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']   # must be lowercased
+
+    def get_permissions(self):
+        if self.request.method in ['PATCH', 'DELETE']:
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
+
+
+UPDATING AN ORDER
+
+- creating a new class that will have permissions to update an order
+    - restricting who can access PUT method on an order
+
+-class for updating order
+
+class UpdateOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = ['payment_status']
+
+- added if statement for PATCH on OrderViewSet
+
+def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return CreateOrderSerializer
+        elif self.request.method == 'PATCH':
+            return UpdateOrderSerializer
+        return OrderSerializer
+
+SIGNALS
+
+- singals are used to decouple apps
+
+- signals are sent whenever models are used:
+    pre_save, post_save, pre_delete, post_delete
+    - signals can be used as triggers do another job
+
+- eg. CORE: create user > listening on Store for "post_save" > STORE: create customer
+
+- signals.py in Core app
+
+from django.conf import settings
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from .models import *
+
+
+# receiver decorator used to listen to post_save and  decide where to send
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)     #sender references AUTH_USER_MODEL to keep apps independent and reusable
+def create_customer_for_new_user(sender, **kwargs):
+    if kwargs['created']:                                   # created dictionary key in signals kwargs
+        Customer.objects.create(user=kwargs['instance'])
+
+
+- applied to Store App.StoreConfig
+
+    # override ready() method
+    def ready(self):                # called when app is ready
+        import store.signals
+
+- now anytime a user is created, a customer is created
+
+    - removed get_or_create functions where retrieving customer objects: customer = Customer.objects.get(user_id=request.user.id)
+        -CreateOrderSerializer.save() and CustomerViewSet.me()
+
+    
+
+CREATING CUSTOM SIGNALS
+
+- it is best to separate signals from signal handlers
+
+
+@receiver(post_save, sender=settings.AUTH_USER_MODEL)     
+def create_customer_for_new_user(sender, **kwargs):         <-- # Signal handler should be separate
+    if kwargs['created']:                                   
+        Customer.objects.create(user=kwargs['instance'])
+
+- above code now lives in a folder:  
+    - store.signals.handlers.py
+
+    - also added an __init__py to the signals folder
+        - in the folder defined a signal object
+
+from django.dispatch import Signal
+
+order_created = Signal()    # signal is an object of signal class
+
+
+- applied signal to CreateOrderSerializer.save()
+
+                # requires sender argument(class sending the signal)
+            order_created.send_robust(self.__class__, order=order)  # using __class__ "magic attribute" which returns class of the current instance
+                # optional additional arguments can be sent ; order in this case
+                    # this signal is sent everytime an order is created
+
+    - send() method can run but will not notify other receivers of exceptions
+        send_robust() notifies of exceptions
+
+- make additional handlers file in core app
+
+from django.dispatch import receiver
+from store.signals import order_created
+
+@receiver(order_created)
+def on_order_created(sender, **kwargs):
+    print(kwargs['order'])
+
+    - override ready() in core.apps.py
+    
+    def ready(self):
+        import core.signals.handlers
+
+COURSE WRAP UP
+
+
+Order objects could not be serialized for some reason after setting up signals.
+    - using the code from part 3

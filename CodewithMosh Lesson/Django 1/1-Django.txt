@@ -1,0 +1,51 @@
+Beginning Django project
+
+pipenv is installed on computer in command shell - it is used to setup a virtual environment - manages dependencies
+    - i did uninstall and reinstall pipenv
+    - confirmed pip is working correctly and located in PATH
+        users\force\AppData\Local\Programs\Python\Python310
+        
+
+pipenv install django - install django library in a virtual environment
+
+setup a directory folder for the new project - project called Storefront
+    C:\Users\force\Python Exercises\Django\storefront
+
+in command shell - set CD to the Storefront directory
+
+Starting up the virtual environment using command shell - and startup django
+    - pipenv shell 
+    - django-admin
+    - django-admin startproject storefront .
+        use a '.' in this command to use the current directory for the project directory
+
+Runserver - Now using python in the command line
+    - python manage.py runserver
+    - server is now active
+    - server can be opened in browser
+    - close server in command shell with ctrl-c
+
+
+Debugging
+
+
+Django Debug Toolbar
+    - instructions: https://django-debug-toolbar.readthedocs.io/en/latest/installation.html
+    - installed in the virtual environment using pipenv
+        pipenv install django-debug-toolbar
+    - app in settings folder
+        "debug_toolbar",
+    - url
+        path("__debug__/", include("debug_toolbar.urls")),
+    - middleware
+        "debug_toolbar.middleware.DebugToolbarMiddleware",
+    - new setting section for internal IP
+                    INTERNAL_IPS = [
+                # ...
+                "127.0.0.1",
+                # ...
+            ]
+
+    - Toolbar will show up on the html body
+        - make sure to set up a body in the html
+

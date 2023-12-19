@@ -1,0 +1,197 @@
+Apply everything learned and build a Shopping Cart API
+
+Designing API
+
+    - needs:
+        create, add items, updaate quantity, remove items, retrieve cart with its items, delete cart
+
+        METHOD          url         request             response
+
+    Cart operations
+        create: POST    /carts/     {}      cart object
+        
+        get cart: Getting   /carts/:id  {}  cart objects
+
+        delete cart: DELETE /carts/:id  {}  {}   
+
+    Cart Item operations
+        add item: POST      /carts/:id/items    {prodId, qty}       item object
+
+        update item: PATCH  /carts/:id/items/:id    {qty}           {qty}
+
+        delete item: DELETE /carts/id:/items/:id    {}              {}
+
+    Viewsets:
+        - CartViewSet
+        - CartItemViewSet
+
+
+Revisiting Data Model
+
+- the cart model automatically has a pk id that django assigns
+    - this is just an integer which makes it easily accessible to hack
+
+    - will replace the cart with a GUID - globally unique identifier
+
+    class Cart(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid4)        # create GUID for carts using uuid4 - pass as a reference so the guid isn't hardcoded
+    created_at = models.DateTimeField(auto_now_add=True)
+
+- course discusses math of storage of bigint in database
+
+
+
+Creating a Cart
+
+    - steps:
+        Serializer > View > Route
+
+    class CartSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Cart
+        fields = ['id'] # created_at does not need to be returned to the client
+
+    - building custom viewset - do not need to present lists
+        - leaving out updatemodelmixin and listmodelmixin
+
+    class CartViewSet(CreateModelMixin, GenericViewSet):        # simple setup - will update later
+        queryset = Cart.objects.all()
+        serializer_class = CartSerializer
+
+Getting a Cart
+
+    - important note - viewset determines url pathing
+        - ids will not be retrieved if RetrieveModemixin is not assigned
+
+class CartViewSet(CreateModelMixin, RetrieveModelMixin, GenericViewSet):
+    queryset = Cart.objects.prefetch_related('items__product').all()
+    serializer_class = CartSerializer
+
+class CartItemSerializer(serializers.ModelSerializer):
+    product = SimpleProductSerializer()
+    total_price = serializers.SerializerMethodField(method_name='get_total_price')
+
+    def get_total_price(self, cart_item: CartItem):
+        return cart_item.quantity * cart_item.product.unit_price
+
+    class Meta:
+        model = CartItem
+        fields = ['id', 'product', 'quantity', 'total_price']
+
+class CartSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(read_only=True)
+    items = CartItemSerializer(many=True)
+    total_price = serializers.SerializerMethodField()
+
+    def get_total_price(self, cart):
+        return sum([item.quantity * item.product.unit_price for item in cart.items.all()])
+
+    class Meta:
+        model = Cart
+        fields = ['id', 'items', 'total_price']
+
+
+
+Deleting a Cart
+
+
+
+
+Getting Cart item
+
+    - added CartItemViewSet
+
+    class CartItemViewSet(ModelViewSet):
+    serializer_class = CartItemSerializer
+
+    def get_queryset(self):                                             # get_queryset is used by the mixins
+        return CartItem.objects/
+        .filter(cart_id=self.kwargs['cart_pk'])/  # filters for cart_id on self.kwargs
+        .select_related('product')                  # eager loads product for inner join
+
+
+    - created nested routers for carts and added to urlpatterns
+
+    cart_router = routers.NestedDefaultRouter(router, 'carts', lookup='cart')
+    cart_router.register('items', views.CartItemViewSet, basename='cart-items')
+
+    urlpatterns = router.urls + products_router.urls + cart_router.urls     
+
+Adding Cart item
+
+    save method details:
+        validated_data = {**self.validated_data, **kwargs}
+
+        if self.instance is not None:
+            self.instance = self.update(self.instance, validated_data)
+            assert self.instance is not None, (
+                '`update()` did not return an object instance.'
+            )
+        else:
+            self.instance = self.create(validated_data)
+            assert self.instance is not None, (
+                '`create()` did not return an object instance.'
+            )
+
+        return self.instance
+
+    - creaated AddCartItemSerializer
+
+    class AddCartItemSerializer(serializers.ModelSerializer):
+    product_id = serializers.IntegerField()
+    
+    def validate_product_id(self, value):  # validate individual fields
+        if not Product.objects.filter(pk=value).exists():
+            raise serializers.ValidationError('No product with the given ID was found.')
+        return value
+    
+    def save(self, **kwargs):
+        cart_id = self.context['cart_id']
+        product_id = self.validated_data['product_id']
+        quantity = self.validated_data['quantity']
+
+        try:
+            cart_item = CartItem.objects.get(cart_id=cart_id, product_id=product_id)
+            
+            #update existing item
+            cart_item.quantity += quantity
+            cart_item.save()
+            self.instance = cart_item
+
+        except CartItem.DoesNotExist:
+            # create new item
+            self.instance = CartItem.objects.create(cart_id=cart_id, **self.validated_data)    
+        
+        return self.instance
+
+    class Meta:
+        model = CartItem
+        fields = ['id', 'product_id', 'quantity']
+
+    - added validator to CartItem model
+
+    validators=[MinValueValiator(1)]
+
+Updating Cart item
+
+    - update cart item serializer
+
+    class UpdateCartItemSerializer(serializers.ModelSerializer):
+        class Meta:
+            model = CartItem
+            fields = ['quantity']
+
+    - added speficis controls for http methods on the cartitem viewset
+    
+        http_method_names = ['get', 'post', 'patch', 'delete']
+
+        - assigned patch method branch for if statement
+            
+            elif self.request.method == 'PATCH':
+                return UpdateCartItemSerializer
+
+
+
+Deleting Cart Item
+
+     - delete method is already implemented

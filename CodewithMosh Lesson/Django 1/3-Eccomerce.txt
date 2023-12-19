@@ -1,0 +1,33 @@
+Ecommerce Application
+    - need a product
+        - products divide in categories
+        - title, description, price, inventory
+    - collections
+        - titles that define products
+    - relationships between products and collections
+        - 1(collection) to many(product)
+        - collections will have an attribute titled product
+        - also can have a featured product which can be 0-1
+    - note that Django automatically assigns id attribute
+
+    Any other essential entities (5):
+        - Cart
+            -created_at (timeline and allows for determining deltion time)
+            - many to many for products and categories
+            - Betweent Product and Cart relationships
+                - CartItem - quantity
+                    - an association class
+                    - could alternatively be 1 to many between both product and Cart
+                    - no relationship between cart and customer
+
+        - Customer:
+            - name, email, etc.
+            - 1 to many with Order (placed_at)
+            - many to many with order and product
+                - OrderItem association class
+                    - quantity
+                    - could alternatively be 1 to many with product and order
+        
+        - Tag:
+            - label
+            - relationship to product; 1 to many

@@ -1,0 +1,254 @@
+ADMIN SITE SETUP
+
+- Django comes equpped automatically with an admin site
+    - check that it is installed in settings.apps
+        'django.contrib.sessions',
+    - migrate changes if it is must be installed
+
+
+
+admin site address:
+    http://localhost:8000/admin/
+
+create superuser
+    python manage.py createsuperuser
+        - username (set to admin), email, password (invisible when typed)
+
+- database will have a sessions table
+
+- auth tracks all authorized users
+    - multiple auth tables
+
+presentation of the site can be managed on urls file
+    eg. admin.site.site_header = 'Storefront Admin'
+        admin.site.index_title = 'Admin'
+
+REGISTERING MODELS
+    - admin site is managed in the store admin file
+
+    eg. admin.site.register(models.Collection)
+        admin.site.register(models.Product)
+
+    - making changes to the model can update how the model is presented in the admin site
+        
+        Collections....
+            def __str__(self) -> str:       # will present the title for each object in Collections
+            return self.title
+        
+            class Meta:
+                ordering = ['title']        # will organize the objects by title
+
+CUSTOMIZE THE LIST PAGE
+
+    - two options for updating model list displays:
+
+@admin.register(models.Product)                     # use a decorator "admin.register" - pass it the model
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ['title', 'unit_price']
+
+
+admin.site.register(models.Collection)
+
+admin.site.register(models.Product, ProductAdmin)      # or in the registered model, pass the modifying class "ProductAdmin"
+
+additional list details can be managed
+    list_editable = ['unit_price']      # allows updating the field live
+    list_per_page = 10                  # sets up pagination
+
+    more options can be found on django project - good django modeladmin
+
+ADDING COMPUTED COLUMNS
+- computed columns can be created using a function to get the needed result
+
+    @admin.display(ordering= 'inventory')   # created sorting based on 'inventory'
+    def inventory_status(self, product):    # created a function for perform an evaluation which can be returned in the list
+        if product.inventory < 10:
+            return 'Low'                # 'inventory_status' will return Low or Ok  based on the evaluation
+        return 'Ok'
+
+    - pass the function name in quotes to the list:
+        eg. 'inventory_status'
+
+SELECTING RELATED OBJECTS
+- selecting related objects can be done for lists
+    - least effective way to get details list_display = ['collection']
+        - query the whole collection model is added
+
+- next option:
+        list_display = ['collection_title']
+
+        def collection_title(self, product):
+        return product.collection.title
+
+
+    list_select_related = ['collection']
+    
+        - does a select related on the model 
+
+OVERRIDING BASE QUERYSET
+ - goal of this section was to make a column and override the queryset 
+
+ list_display  = ['title', 'products_count'] # added 'products_count' ; this object doesn't exist yet
+
+ def get_queryset(self, request):                           # function for the new field
+        return super().get_queryset(request).annotate(      # produce a queryset from collection
+            products_count=Count('product')                 # annotate Count based on products
+        )
+
+    - this is passed to products_count function and then to the object/queryset in the list
+
+
+
+
+PROVIDING LINKS TO OTHER PAGES
+- these modules are required for creating links to other pages (format_html ; urlencode; reverse)
+        from django.utils.html import format_html, urlencode
+        from django.urls import reverse
+
+def orders_count(self, customer):                   # this function has multiple purposes
+        url = (                                     # url value which will hold the link address    
+            reverse('admin:store_order_changelist') # reverse finds the url for the selected changelist (prevents issues with urls changing)
+            + '?'                                   # html filter syntax
+            + urlencode({                           # encodes url based on dictionary passed
+                'customer_id' : str(customer.id)    # customer_id(key): str(customer.id) - value is a string of the customer id which is passed in the html request
+            })
+        )
+        return format_html('<a href="{}"> {}</a>', url, customer.orders_count) 
+
+        - return format_html
+            - returns html code - url and a function name is passed
+
+
+
+ADDING SEARCH TO THE LIST PAGE
+
+- search fields are easy so far
+    - use search_fields method
+        - pass list of fields to search by
+        - apply __istartswith
+            - i (insensitive - not case sensitive)
+            - startswith - rather than searching whether the search value is included at all,
+                only checks the first letter of the search fields
+
+search_fields = ['first_name__istartswith', 'last_name__istartswith']   # search_fields function
+
+
+ADDING FILTERING TO THE LIST PAGE
+- method to create filters on the changelist
+    - InventoryFilter is passed as an additional filter made using a class
+
+list_filter = ['collection', 'last_update', InventoryFilter]
+
+
+- creating additional filtering to the list page
+
+class InventoryFilter(admin.SimpleListFilter):      # class using admin.SimpleListFilter
+    title = 'inventory'                             # title attr        - name of the filter ("By ___")
+    parameter_name = 'inventory'                    # parameter_name attr  - (???)
+
+    def lookups(self, request, model_admin):        # lookups module - defines filter parameters
+        return [
+            ('<10', 'Low')                          # filter values
+        ]
+    
+    def queryset(self, request, queryset):          # values are passed in 
+        if self.value() == '<10':
+            return queryset.filter(inventory__lt=10)
+
+
+CREATING CUSTOM ACTIONS
+    - custom actions can be added to the admin site
+
+    - include the messages module to modify the type of messages presented to the user
+        - from django.contrib import messages
+
+actions = ['clear_inventory']       # method for presenting additional actions to the user in the 'actions' drop down
+
+@admin.action(description= 'Clear inventory')   #decorator wrap for admin action method
+    def clear_inventory(self, request, queryset):
+        updated_count = queryset.update(inventory=0)
+        self.message_user(                             # method of ModelAdmin class to display a message to user
+            request,
+            f'{updated_count} products were successfully updated',
+            messages.ERROR                              # a possible third argument - defining the type of message (presents as an error - red cross)
+
+
+CUSTOMIZING FORMS
+    - django includes the ability to add objects on the admin site
+
+    - on admin - tools for modifying the form
+        fields = ['title', 'slug']          # controls all the fields which are available when creating an object in an admin form
+        exclude = ['promotions']            # option to choose which fields are excluded from a form
+        readonly_fileds= ['title']          # set certain fields as readonly at the bottom of the form
+
+
+    - additional options
+        autocomplete_fields = ['collection']    # presents drop down with input to filter the list
+        prepopulated_fields = {
+            'slug': ['title']       # copies what is typed in the value - useful if the same value is used in multiple fields
+        }
+
+        -autocomplete method is being used by Product
+            - for it run on collection, a search field must exist in collectionAdmin
+
+            search_fields = ['title']
+
+    - search django model admin filter website for more features
+
+    Looking Order page - add order
+        - only has two fields: Payment status, and customer
+            - placed_at is not present because the model has it set with (auto_add=True) parameter
+                placed_at = models.DateTimeField(auto_now_add=True)
+            - this field will be automatically created whenever a new order is placed
+
+    On OrderAdmin
+        - I created an autcomplete field for customers
+
+ADDING DATA VALIDATION
+    - There is some automated levels of validation in Django (eg. add object forms)
+        - additional layers can be set by applying controls to the models
+
+    -django validators module has tools validation
+        from django.core.validators import MinValueValidator
+
+
+    - validations are applied to the model objects themselves
+    - Products examples
+        description = models.TextField(null=True, blank=True)
+
+            - description can be null, but to create a product with description, it must be "blank=True"
+
+        unit_price = models.DecimalField(
+            max_digits=6, 
+            decimal_places=2,
+            validators=[MinValueValidator(1)]       # additional validation placed on unit_price - the value will not go below 1, no negative numbers
+            )
+
+EDITING CHILDREN USING INLINES
+ - managing items of an order
+
+ Examples on OrderAdmin
+
+    prior to adding inlines, no changes can be made to an orderitem (child of order model)
+
+    class OrderItemInline(admin.TabularInline): # inherit from Inline - use either TabularInline or StackedInline formatting
+    autocomplete_fields= ['product']
+    min_num = 1
+    max_num = 10
+    extra = 0
+    model = models.OrderItem                    # assign model
+
+
+        - On OrderAdmin class - assign
+            inlines = [OrderItemInline]
+
+USING GENERIC RELATIONS
+
+
+
+
+EXTENDING PLUGGABLE apps
+
+
+
+WHAT'S NEXT

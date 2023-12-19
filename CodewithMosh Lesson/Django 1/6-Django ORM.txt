@@ -1,0 +1,422 @@
+DJANGO ORM
+
+- ORM - Object Relational Mappers
+    - maps objects to relational records - instead of needing to write sql for each record
+        - sometimes more complex projects require manual sql code
+    - migrations and model classes are part of Django ORM
+
+NOTE: reformatted workspace and database
+    - debug-toolbar not working - need to figure out
+    - database is setup > used seed sql file from the course resources folder
+
+MANAGERS and QUERY SETS
+
+Every model has an attribute called objects
+ - objects is an interface to the database
+ - objects has a method for querying the database
+    - most methods return a query_set to be used later
+        - eg. query_set = Product.objects.all()
+        - this can be used like print(query_set) or it can be iterated upon, sliced, indexed
+    
+    - some methods are called immediately
+        - eg. count = Product.objects.count()
+    
+    -additional ex.
+        query_set.filter().filter().order_by()
+
+RETRIEVING OBJECTS
+
+retrieving single objects in a tables
+    query_set = Product.objects.get(id=1) - object with id 1
+    query_set = Product.objects.get(pk=1) - pk is special parameter - pk means primary key (whatever object is the primary key)
+
+examples
+
+product = Product.objects.filter(pk=0).first() # filters and returns the first method of the query set
+    exists = Product.objects.filter(pk=0).exists() # returns boolean value if there is an object
+
+    key_value = Product.objects.filter(unit_price__gt=20)   # using lookup types for booleans
+    range = Product.objects.filter(unit_price__range=(20, 30)) # range - use two values
+    queryset = Product.objects.filter(collection__id=1)
+    #query2 = Product.objects.filter(collection__id__range=(10, 25))
+    coffee = Product.objects.filter(title__icontains='coffee') # filtering for titles containing coffee ; "icontains" means case insensitive
+    twentyone = Product.objects.filter(last_update__year='2020') # filter by year; can be done by date (yyyy-mm-dd) must be a string
+    nullDesc = Product.objects.filter(description__isnull=True) # useful if products are missing descriptions
+
+NOTE: the html document must be edited to make space for whatever will be presented (not necessarily how it will be in production)
+
+<html>
+  <body>
+    {% if name %}
+    <h1>Hello {{ name }}</h1>
+    {% else %}
+    <h1>Hello World</h1>
+    {% endif %}
+    <ul>
+      {% for product in products %}
+      <li>{{ product.title }}</li>
+      {% endfor %}
+    </ul>
+  </body>
+</html>
+
+# practice
+    custW_Accts = Customer.objects.filter(email__icontains='.com')
+    nullFeatProd = Collection.objects.filter(featured_product__isnull=True)
+    lowInvent = Product.objects.filter(inventory__lt=10)
+    custIdOne = Order.objects.filter(customer__id=1)
+    itemCollThree = OrderItem.objects.filter(product__collection__id=3)
+
+
+COMPLEX LOOKUP USING Q OBJECTS
+
+    inventory = Product.objects.filter(inventory__lt=10, unit_price__lt=20) # combined filters (sql query with AND operator)
+        # or
+    inventory = Product.objects.filter(inventory__lt=10).filter(unit_price__lt=20)
+
+    other = Product.objects.filter(Q(inventory__lt=10) | Q(unit_price__lt=20)) # import django.models.Q - use Q and bitwise OR operator "|"
+
+    bitwiseAnd = other = Product.objects.filter(Q(inventory__lt=10) & ~Q(unit_price__lt=20)) # additonally using "~" for NOT - eg. not less than 20
+
+
+REFERENCING FIELDS USING F OBJECTS
+how to reference objects - use F module from django.db.models
+
+inventory = Product.objects.filter(inventory=F('collection__id'))
+    - filtering on Product model - where inventory = collection_id
+    - the referenced attribute is also in Product
+
+
+SORTING
+inventory = Product.objects.order_by('title')   # order by in ascending order (ascending is default)(descending - adjust parameter '-title')
+
+    #inventory = Product.objects.order_by('unit_price', '-title').reverse() # this will reverse ordering
+
+    #inventory = Product.objects.filter(collection__id=3).order_by('unit_price') # attach orderby method to filter
+
+    inventory = Product.objects.order_by('unit_price')[0] # returns the first object in a query set
+    early = Product.objects.earliest('unit_price')  # returns the first object
+    early = Product.objects.latest('unit_price')  # returns a queryset in descending order, then gives the first object
+
+LIMITING RESULTS
+
+slicing 
+queryset = Product.objects.all()[:5]
+queryset = Product.objects.all()[5:10]
+
+SELECTING FIELDS TO QUERY
+
+Can use values method to specify fields to query
+
+queryset = Product.objects.values('id', 'title', 'collection__title')
+    - use values method and specify the attributes; related fields can be accessed using "__"
+    - inner join is created when using related fields
+
+    - this creates dictionary objects
+    - changing the html to present the object itself, rather than attribute will display the full dictionary
+
+value_list method can be used to return tuples
+
+valList = Product.objects.values_list('id', 'title', 'collection__title')
+
+
+ordered = Product.objects.filter(
+        id__in=OrderItem.objects.values('product_id').distinct()).order_by('title') # distinct does not need argument ; order_by does
+
+    - above shows select products that have been ordered - sort by title
+    - html format needs to render the product.title
+
+
+DEFERRING FIELDS
+
+queryset = Product.objects.only('id', 'title') # gives instances of product class ; values gives dictionary of the model
+
+    - only() limits the fields that are viewed, but it returns an entire instance of product class
+    - can result in alot of data being processed if not careful
+
+deference = Product.objects.defer('description') # allows saving details of a model to be retrieved later
+
+    - defer excludes attributes to be retrieved later
+    - the object is still retrieved so this can still result in a lot of data
+        - queries for each attribute retrieved ???
+
+
+SELECTING RELATED OBJECTS
+
+queryset = Product.objects.select_related('collection').all() # selected_related creates a join with model table - one query 
+
+    - select_related is used in one to many (a product will have one collection)
+
+
+prefetch = Product.objects.prefetch_related('promotions').all()
+
+    - prefetch_related used when the other end of the relationship will have many  instances (product - promotion is many to many)
+
+Exercise:
+    - Get last 5 orders with their customer and items
+
+recent = OrderItem.objects.reverse()[0:5].select_related('order').select_related('product')
+
+NOTE: model_set - is the default naming convention Django uses to create reverse relationships
+    - can be changed using "related_name=" on the model
+
+correct = Order.objects.select_related('customer').prefetch_related('orderitem_set__product').order_by('-placed_at')[0:5]
+
+
+AGGREGATING OBJECTS
+
+
+To return a count
+
+def say_hello(request):
+
+    result = Product.objects.aggregate(Count('id')) # correct way to count number of records - use id or primary key
+
+
+    return render(request, 'hello.html', {'name': 'Jeremy', 'result': result})
+
+<html>
+  <body>
+    {% if name %}
+    <h1>Hello {{ name }}</h1>
+    {% else %}
+    <h1>Hello World</h1>
+    {% endif %} {{result}}
+    <ul>
+      
+    </ul>
+  </body>
+</html>
+
+Key word objects can be used to replace aggregate objects (change the name presented)
+
+result = Product.objects.aggregate(count=Count('id'), min_price=Min('unit_price'))
+
+
+CALLING DATABASE FUNCTIONS
+
+Django has expression class
+    - derivatives of Expression : 
+        Value
+        F
+        Func
+        Aggregate
+
+NOTE: Boolean values cannot be passed as expressions
+    - use Value method to pass a boolean expression
+    
+        queryset = Customer.objects.annotate(new_id=Value(True)
+            - appends new_id field to customer record with a value of True
+    
+    - below appends an id to customer record - F used to reference the id of that customer
+        queryset = Customer.objects.annotate(new_id=F('id') + 1)    # the referenced field can have evaluation perfomred (eg. + 1)
+
+
+- below is an example of using Func to create a function in Django
+    - this function is being used to concatenate multiple strings
+        - to make a space, a Value object must be passed with the spaced quotes in order for Django to recognize it
+    
+    - import Func from models to use the below code
+
+queryset = Customer.objects.annotate(
+        # CONCAT
+        full_name=Func(F('first_name'), Value(' '), F('last_name'), function='CONCAT')
+    )
+
+- an easier method for concatenate is Concat
+    - no need to call out Function and references
+    - import this method : from django.db.models.functions import Concat
+
+    queryset = Customer.objects.annotate(
+        # CONCAT
+        full_name=Concat('first_name', Value(' '), 'last_name')
+    )
+
+
+GROUPING DATA
+
+- below example for grouping data
+    - use the Customer model to collect number of orders a customer has
+        - customer has a reverse relationship with order > orderitem_set
+            - however this wil lnot give us a count successfully (unclear why)
+
+    - to receive a count from order
+        - simply use order
+
+    queryset = Customer.objects.annotate(
+        orders_count=Count('order')
+    )
+
+
+EXPRESSION WRAPPERS
+
+ - Expression Wrappers are tools from Expression class
+
+    - running below function as is gives an exception
+        - "Expression contains mixed types". Must set output_field
+
+        - the expression is actually set to a variable first; an output_field must be set to determine the value output_field
+            - use decimals for pricing
+        -variable is called in the queryset and a new field "discounted_price" is appended to the product records
+
+        discPrice = ExpressionWrapper(F('unit_price') * 0.8, output_field=DecimalField())
+
+        queryset = Product.objects.annotate(
+            discounted_price=discPrice
+        )
+
+QUERYING GENERIC RELATIONSHIPS
+    - TaggedItem model was initially set with ContentType framework - keeps it uncoupled from store app
+
+    - To reference we need to use contenttype ids in the database
+        - django contenttype creates an id for every model of every app in the database
+            - eg. store.product id is 11
+        - the number itself will not be explicitly referenced as that id could be different in production (???)
+
+    - taggeditem can reference the contenttype id and object id
+
+    from django.contrib.contenttypes.models import ContentType
+    from tags.models import TaggedItem
+
+
+contentType = ContentType.objects.get_for_model(Product)    #use ContentType model and its object to get the id for Product
+
+    querySet = TaggedItem.objects \
+        .select_related('tag') \                            # use select_related to limit the amount queries
+        .filter(
+            content_type=contentType,                       # pass contentType variable here in the TaggedItem filter
+            object_id=1                                     # filter on object id 1
+    )
+
+
+CUSTOM MANAGERS
+- goal is to create custom managers that limit the amount of code needing to be written
+
+- this is done by creating a class/model in the models 
+    - the class inherits "models.Manager" class
+    - the original function becomes a method of the new Custom Manager "TaggedItemManager"
+
+    - changes to the function 
+        - accepts parameters: self, obj_type, obj_id
+
+    class TaggedItemManager(models.Manager):            # this is a custom manager
+        def get_tags_for(self, obj_type, obj_id):       
+            contentType = ContentType.objects.get_for_model(obj_type)   # obj_type 
+
+            return TaggedItem.objects \                                 # queryset is returned immediately
+                .select_related('tag') \
+                .filter(
+                    content_type=contentType,
+                    object_id=obj_id                                    # boj_id
+            )
+
+- Now running the query - the TaggedItem function can be referenced like this
+
+    querySet = TaggedItem.objects.get_tags_for(Product, 1)
+
+
+
+UNDERSTANDING QUERYSET CHACHE
+- when a queryset is called - it is cached
+    - calling that queryset a second time > it is pulled from the cached data
+        - otherwise it is pulled from database/disk
+
+    eg:
+    queryset = Product.objects.all()
+    
+    list(queryset)          # the entire query set is accessed ; indexing can be done from the cche
+    queryset[0]
+
+NOTE: this is only when the entire queryset has been accessed first
+
+if only a part of the queryset is accessed first ; this can result in multiple queries
+
+    eg:
+    queryset = Product.objects.all()
+    
+    queryset[0]     # the queryset is indexed first, requiring another query when the whole set needs to be accessed
+    list(queryset)
+    
+
+
+CREATING OBJECTS
+ - how to insert records in database
+
+ - below is an operation to create a new collection 
+        - create object and field values
+
+        collection = Collection()
+        collection.title = 'Video Games'
+        collection.featured_product = Product(pk=1)
+        collection.save()   # insert operation - collection will be created
+
+
+UPDATING OBJECTS
+- updating seems straightforward
+
+    collection = Collection(pk=11)                                          # select record to be updated by pk
+    collection.title = 'Games'                                              # edited title
+    collection.featured_product = None                                      # remove featured_product
+    collection.save()                       # insert operation - details updated  
+
+    - optional
+
+    collection = Collection.objects.get(pk=11)      # only needed if there is a performance problem
+        -eg. setting a field to None causing loss of other data
+
+- updating an entire model
+
+    Collection.objects.update(featured_product = NONE) - set every record in collections featured_product to NONE
+
+    - update specific record
+
+        Collection.objects.filter(pk=11).update(featured_product = NONE)
+
+
+DELETING OBJECTS
+    - simple
+
+    item = CartItem(pk=8)
+    item.delete()
+
+
+TRANSACTIONS
+
+
+
+@transaction.atomic()   # creates a transaction for the function - all of it works or none of it does
+def say_hello(request):
+
+    with transaction.atamoic(): # or it can be placed here to determine what specific part of code is a transaction
+        order = Order()
+        order.customer_id = 1
+        order.save()
+
+        item = OrderItem()
+        item.order = order
+        item.product_id = 1
+        item.quantity = 1
+        item.unit_price = 10
+        item.save()
+
+NOTE: i could not get django to create a new record without specifying pk
+    eg. order = Order(pk = 1001); item = OrderItem(pk=1001)
+
+
+EXECUTING RAW SQL QUERIES
+    - how to create querysets using raw queries
+
+        Product.objects.raw('Select * FROM store_product')
+
+    - this is only useful for complex queries that can be written cleaner raw - or to work around django methods
+    
+    - below is method for using cursor:
+
+        cursor = connection.cursor()
+        cursor.execute('INSERT')
+        cursor.close()
+
+    - below is clean method that allows for cursor to automatically close:
+
+        with connection.cursor() as cursor:
+            cursor.execute()

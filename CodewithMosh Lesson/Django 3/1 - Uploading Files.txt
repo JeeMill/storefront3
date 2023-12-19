@@ -1,0 +1,58 @@
+INTRO
+    - build restful api for client app to upload files
+
+
+
+
+MANAGING MEDIA FILES
+
+- create media folder
+    - for django refrers to user uploaded media files
+
+- STATIC_URL refers to hard coded fetures
+
+- in settings, create MEDIA_URL = '/media' 
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+
+in storefront.urls.py
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+
+ADDING IMAGES TO PRODUCTS
+
+
+
+
+BUILDING AN API TO UPLOAD IMAGES
+
+
+
+
+
+RETURNING IMAGES FROM THE API
+
+
+
+
+VALIDATING UPLOADED FILES
+
+
+
+
+
+SETTING UP THE CLIENT APP
+
+
+
+
+
+ENABLING CORS
+
+
+
+
+MANAGING IMAGES IN THE ADMIN

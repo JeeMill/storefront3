@@ -1,0 +1,331 @@
+INTRO
+
+    - lesson covers:
+        token-based authentication
+        adding authentication endpoints
+        registering, logging in, etc.
+        applying permissions
+
+    - guide to djoser
+
+    https://djoser.readthedocs.io/en/latest/getting_started.html
+
+TOKEN-BASED AUTHENTICATION
+
+    - this is the standard for RESTful API authentication
+
+    - client app sends request to user endpoint
+        - server captures user information and makes account
+
+    - client app sends login request to authentication endpoint (include user credentials) send to server
+        - server will attempt to validate user credentials
+            if wrong, will send an error
+        - if validated, a token send to user
+
+    - client stores token locally to access protected resources
+
+
+
+ADDING AUTHENTICATION ENDPOINTS
+
+    - Django does not include API Authentication endpoints
+        - Required for login and account creation
+
+    - using DJoser
+        - installed, coming back for other libraries later
+
+    - DJoser requires an authentication engine to do the work
+        - it is only the serializers, viewsets, etc. to make it run
+
+    authentication engine
+        - token based requires database call
+        - JSON based does work on the server itself - storing the token
+
+
+
+    pipenv install djoser
+    pipenv install djangorestframework_simplejwt
+
+    - in storefront urls.py
+    path('auth/', include('djoser.urls')),          #DJOSER
+    path('auth/', include('djoser.urls.jwt')),      #DJOSER Web Token
+
+    - 'djoser' added to INSTALLED APPS
+
+    - added to settings.RestFramework
+
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        (...)
+    )
+
+    - added at the bottom of settings
+    SIMPLE_JWT = {
+        'AUTH_HEADER_TYPES': ('JWT',)
+    }
+
+    -endpoints are active now, but to access JSON request token must be passed
+    http://localhost:8000/auth/users/
+
+
+REGISTERING USERS
+
+    - POST is allowed for unregistered user
+        - this allows create account
+
+    - simulate account creation
+        - validators on account creation in settings
+
+
+    - created serializer in core app
+
+from djoser.serializers import UserCreateSerializer as BaseUserCreateSerializer
+from rest_framework import serializers
+
+
+class UserCreateSerializer(BaseUserCreateSerializer):
+
+    birth_date = serializers.DateField()
+
+    class Meta(BaseUserCreateSerializer.Meta):
+        fields = ['id', 'username', 'password', 'email', 'first_name', 'last_name']
+
+
+    - additional function in settings
+
+DJOSER = {
+    'SERIALIZERS': {
+        'user_create': 'core.serializers.UserCreateSerializer'
+    }
+}
+
+NOTE: Every endpoint should have only one responsibility
+    - removing 'birth_date' field from UserCreateSerializer
+
+BUILDING PROFILE API
+
+    -  this code sets up the customers endpoiont to create customer profile
+            - different from user authentication
+
+class CustomerSerializer(serializers.ModelSerializer):
+
+    # explicitly calling user_id - otherwise it is called at runtime and not visible
+    user_id = serializers.IntegerField()
+
+    class Meta:
+        model = Customer
+        fields = ['id', 'user_id', 'phone', 'birth_date', 'membership']
+
+class CustomerViewSet(CreateModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet):    # does not need a list of customers
+    queryset = Customer.objects.all()
+    serializer_class = CustomerSerializer
+
+
+router.register('customers', views.CustomerViewSet)
+
+
+LOGGING IN
+
+    /jwt/create is the login endpoint
+
+    - login must be done with valid endpoint and password
+        - error code is 401 Unauthorized
+
+    - successful login
+        - 200 response
+        - a refresh token - used when access token expires (eg last 1 day)
+        - an access token - short-lived for calling secure endpoints (eg 5 minutes)
+
+        - token functionality can be edited
+            https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
+
+
+    - example edit in settings - import datetime.timedelta
+        SIMPLE_JWT = {
+        "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
+    }
+
+    - front end development has different processes for storing tokens
+        - in this case, store on local machine
+            "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzAyNTA0OTQzLCJpYXQiOjE3MDI0MTg1NDMsImp0aSI6IjEyYTQ1MmM3MzIyZjQwOGJiZGU1YTExM2RiYmE4NGU1IiwidXNlcl9pZCI6NH0.WYr0VoVP9XPN6WF7v0fCKMbq8cmubtMj6uvWaCGGUWU"
+
+
+INPSECTING A JSON WEB TOKEN
+
+    -jwt.io - website for jwt
+
+    - multiple libraries for different languages
+        - simple jwt used for django
+
+
+    - tokens are JSON objects that have been encoded
+        - header: type and algorithm
+        - payload: token_type(eg.access), expiration, 
+            jti(unique identifier for the token), user_id
+        - digital signature: generated based on header and payload
+            - if either is changed, the signature regenerates
+
+            - digital signature algorithm
+                HMACSHA256(
+                    base64UrlEncode(header) + "." +
+                    base64UrlEncode(payload),
+                    
+                    your-256-bit-secret
+
+                    ) secret base64 encoded
+
+
+REFRESHING TOKENS
+
+
+
+
+
+GETTING THE CURRENT USER
+
+    - installed ModHeader extension in browser to modify headers
+        - purpose is to modify https headers so that JWT header can be applied to authorization
+
+        - set Authorization - JWT "access code here"
+
+    - turn it off when no longer using it - extension can mess with other websites JSON
+
+
+    class UserSerializer(BaseUserSerializer):
+        class Meta(BaseUserSerializer.Meta):
+            fields = ['id', 'username', 'email', 'first_name', 'last_name']
+
+    - djoser authentication serializers are loaded in settings
+
+    DJOSER = {
+    'SERIALIZERS': {
+        'user_create': 'core.serializers.UserCreateSerializer'
+        'current_user': 'core.serializers.UserSerializer'
+    }
+}
+
+
+GETTING CURRENT USER'S PROFILE
+
+    - functions of mixins are called action - apply @action decorator when setting a method on viewset
+
+    - adjustments to customer viewset
+
+    class CustomerViewSet(CreateModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet):    # does not need a list of customers
+    queryset = Customer.objects.all()
+    serializer_class = CustomerSerializer
+
+    @action(detail=False, methods=['GET', 'PUT'])   # False sets action available on list - True sets action available on detail (eg customers/1/)
+    def me(self, request):
+        (customer, created) = Customer.objects.get_or_create(user_id=request.user.id)    # get customer object
+        if request.method == 'GET':
+            serializer = CustomerSerializer(customer)                   # serialize object
+            return Response(serializer.data)                            # return serializer data
+        elif request.method == 'PUT':
+            serializer = CustomerSerializer(customer, data=request.data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+
+
+        - for the if statement, a tuple with two objects is provided by get_or_create
+            - first object is a customer object, the second is a boolean variable ( was object created or not)
+            - use multiple assignment to unpack the tuple
+
+
+    class CustomerSerializer(serializers.ModelSerializer):
+        # explicitly calling user_id - otherwise it is called at runtime and not visible
+        user_id = serializers.IntegerField(read_only=True)
+
+        - edited serializer so user id is read only
+
+    - with JWT header and access code passed in html request
+        - customer account can be read and updated using JWT authentication
+
+APPLYING PERMISSIONS
+
+https://www.django-rest-framework.org/api-guide/permissions/
+
+    - django rest_framework supplies permissions classes
+    
+    - they can be applied globally
+        examples:
+                'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated'
+    ]
+
+                'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny'
+    ]
+
+    - can be applied to viewsets
+        class CustomerViewSet(CreateModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet):    # does not need a list of customers
+            queryset = Customer.objects.all()
+            serializer_class = CustomerSerializer
+            permission_classes = [IsAuthenticated]
+
+    - additional permissions can be applied to the viewset based on http method
+        def get_permissions(self):
+            if self.request.method == 'GET':
+                return [AllowAny()]
+            return [IsAuthenticated()]
+
+
+APPLYING CUSTOM PERMISSIONS
+
+    - created a custom permissions
+        - new file permissions.py
+
+
+from rest_framework import permissions
+
+class IsAdminOrReadOnly(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS :
+            return True
+        return bool(request.user and request.user.is_staff)
+
+
+    - applied the custom permission to Products and Collections viewsets
+
+permission_classes = [IsAdminOrReadOnly]
+
+
+
+APPLY MODEL PERMISSIONS
+
+- DjangoModelPermissions
+    - method for restricting permissions on the site
+    - maps http method and permissions
+
+        perms_map = {
+        'GET': [],
+        'OPTIONS': [],
+        'HEAD': [],
+        'POST': ['%(app_label)s.add_%(model_name)s'],
+        'PUT': ['%(app_label)s.change_%(model_name)s'],
+        'PATCH': ['%(app_label)s.change_%(model_name)s'],
+        'DELETE': ['%(app_label)s.delete_%(model_name)s'],
+    }
+
+    - creating a custom permissions set using DjangoModelPermissions
+
+    class FullDjangoModelPermissions(permissions.DjangoModelPermissions):
+        def __init__(self):
+            self.perms_map['Get'] = ['%(app_label)s.view_%(model_name)s']
+
+
+    - changed customerviewset permissions back to IsAdminUser
+
+APPLY CUSTOM MODEL PERMISSIONS
+
+    - applying custom user permissions
+
+    example in Customer.Meta
+
+            class Meta:
+                permissions = [
+                    ('view_history', 'Can view history')
+                ]
+
+    - then apply permission to an action

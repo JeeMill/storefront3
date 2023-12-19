@@ -1,0 +1,70 @@
+create 2 apps:
+    - store
+    - Tags
+
+python manage.py startapp store
+python manage.py startapp tags
+
+
+models are created in the models file using classes and attributes - these become "fields" for django
+    - setup order and customer classes
+    - created variables and lists that can be used to create other attributes
+    - choices uses tuples of two values (stored, readable)
+
+docs.djangoproject.com - references for creating fields
+
+One to one relationships
+    class Address(models.Model):
+        street = models.CharField(max_length=255)
+        city = models.CharField(max_length=255)
+        customer = models.OneToOneField(Customer, on_delete=models.CASCADE, primary_key=True)
+            # Customer is selected in arguments - Customer will be the Parent (parent-child relationship)
+            # arguments - select model, decide what happens when model relation is deleted, primary_key=True (makes relationship unique)
+
+One to Many relationship
+customer = models.ForeignKey(                   # foreignkey designates one to many relationship
+        Customer, on_delete=models.CASCADE)     # relationship set with Customer model; using Cascade delete effect
+
+passing the value for relationships will not work if the desired value comes later in the confirmed 
+    - passing string can avoid this
+
+NOTE: Child class defines the relationship with parent in its own attributes
+
+Many to Many
+- any time many to many relationships are setup - django automatically creates the reverse relationship
+- circular dpendency occurs when two classes depend on each other
+
+ex.
+fetured_product = models.ForeignKey('Product', on_delete=models.SET_NULL, null=True, related_name='+') 
+
+    - related name here can be used to assign a different name for the reverse relationship, or to not create a reverse relationship
+
+
+Generic relationships
+
+ - contenttypes are tools for creating generic relationships to loosely connect objects in django
+ - The ContentType app is already installed in the settings folder:
+
+- in this instance using content types to setup the tags modules
+    - in tag\models.py
+        from django.contrib.contenttypes.models import ContentType
+
+Three fields need to be defined for generic relationships:
+    content type
+    object id
+    content object
+
+Ex.
+class TaggedItem(models.Model):
+    # what tag is applied to what object
+    tag = models.ForeignKey(Tag, on_delete=models.CASCADE)
+    # poor example
+    #product = models.ForeignKey(Product) # dependency on Store app
+
+    #Good Example
+    #Type (product, video, article)
+    #ID
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey() 
+

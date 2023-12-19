@@ -1,0 +1,136 @@
+Intro
+ - covers
+    how authentication system works
+    user model and customizing it
+    extending user model
+    creating profiles
+    managing groups and permissions
+
+
+
+
+DJANGO AUTHENTICATION SYSTEM
+
+    - django.contrib.auth application is automatically installed
+
+    - middleware is function that takes a request: 
+        - either passes it to the next middleware
+        - or passes a response
+
+    - django receives requests which are passed to view
+        - during this, django passes to the middleware list in order
+        - each function can add something to request or return response
+            - if response is returned, the next middleware function is not executed
+    
+    - authentication middleware reads user info from request
+
+    example request.user
+        - can be instance of anonymous user class
+        - or an actual user object
+
+        - the authentication middleware reads the request and assigns the request.user object
+
+
+
+
+CUSTOMIZING USER MODEL
+
+    - user inheritance can be used to extend the user object
+        - PURPOSE: when storing attributes related to authentication
+
+    or
+
+    - profile for user can be created (this would be a profile model - not inheritance)
+        - PURPOSE: any non-auth related attributes (birthday, address, etc.)
+
+
+
+
+
+EXTENDING THE USER MODEL
+
+    - create new user model
+        - username and email should be unique
+
+    - will put the model in store_custom
+        - change name to "core"
+
+    - always create custom user class at the beginning (avoid migration consistency issues)
+
+    - registered the useradmin class (in the core app)
+
+    @admin.register(User)
+class UserAdmin(BaseUserAdmin):
+        add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": ("username", "password1", "password2", "email", "first_name", "last_name"),
+            },
+        ),
+    )
+
+    - updated references to user to make use of AUTH_USER_MODEL in settings
+
+        class LikedItem(models.Model):
+            user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
+CREATING USER PROFILES
+
+    - deleted first, last name and email from customer model
+        - reference AUHT_USER_MODEL for user object
+
+        - requires referencing djanog.conf.settings
+
+class Customer(models.Model):
+    MEMBERSHIP_BRONZE = 'B'
+    MEMBERSHIP_SILVER = 'S'
+    MEMBERSHIP_GOLD = 'G'
+
+    MEMBERSHIP_CHOICES = [
+        (MEMBERSHIP_BRONZE, 'Bronze'),
+        (MEMBERSHIP_SILVER, 'Silver'),
+        (MEMBERSHIP_GOLD, 'Gold'),
+    ]
+
+    phone = models.CharField(max_length=255)
+    birth_date = models.DateField(null=True)
+    membership = models.CharField(
+        max_length=1, choices=MEMBERSHIP_CHOICES, default=MEMBERSHIP_BRONZE)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE) # added OneToOne field
+    
+    # order_set : reverse relationship
+    def __str__(self) -> str:
+        return f'{self.user.first_name} {self.user.last_name}'   
+
+    class Meta:
+        ordering = ['user__first_name', 'user__last_name']
+
+
+GROUPS AND PERMISSIONS
+
+    - make groups and assign permissions to users based on membership
+
+    - django automatically creates permissions based on the models we have setup
+        - the new user model now has user based permissions
+
+        - the associations are built on app and model in the django-content table
+
+    - groups and the associated permissions can be managed in the admin site
+        - once gropus created - select users and assign them to groups
+
+CREATING CUSTOM PERMISSIONS
+
+    - custom permissions created using meta class
+
+    - attached meta class to the Order model
+
+    class Meta:
+        permissions = [
+            ('cancel_order', 'Can cancel order')    # create permission title and description in a tuple
+        ]
+
+    - always makemigrations and migrate after updating a model
+
+    - once permission is set up, it can be assigned individual to a user

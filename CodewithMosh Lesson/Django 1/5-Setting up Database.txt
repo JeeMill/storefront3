@@ -1,0 +1,99 @@
+This Section Covers:
+    - creating migrations
+    - running migrations
+    - reversing migrations
+    - populating the database
+
+SQLite is preloaded with Django
+
+MySQL will be used for this course (covering SQLite briefly)
+
+CREATING MIGRATIONS
+    - migrations create database tables based on Django models
+    - all models must be set correctly, resolve any circular dependencies
+
+In command line:
+    python manage.py makemigrations
+
+    - creates a migrations file
+        store\migrations\0001_initial.py
+
+Ctrl-T - go to symbol eg.(CtrlT > #Product > will pull up the Product model)
+
+    - making updates to a model and running makemigrations is SAFE
+        - on running, Django will check the changes made and ask for confirmation
+        - a new migration will be created with a new description for the file name
+            - this is not a complete new migration, it is an operation on the old one
+
+        class Migration(migrations.Migration):
+
+    dependencies = [
+        ('store', '0001_initial'),
+    ]
+
+    operations = [
+        migrations.RenameField(
+            model_name='product',
+            old_name='price',
+            new_name='unit_price',
+        ),
+    ]
+
+    -file name can be changed, but be aware to update any other locations that name is used
+
+    - if no changes are made and makemigrations is run - Django will respond there are no detected changes
+
+Slugs:
+    - make it easy for search engines to find 
+    - add to every model
+    slug = models.SlugField()
+
+    Slug - is the format of letters,numbers, hyphens, and underscores that domain names use
+
+    - when running makemigrations with the above code this response
+
+    "It is impossible to add a non-nullable field 'slug' to product without specifying a default. This is because the database needs something to populate existing rows.
+        Please select a fix:
+        1) Provide a one-off default now (will be set on all existing rows with a null value for this column)
+        2) Quit and manually define a default value in models.py.
+        Select an option:"
+
+    - in this instance select 1
+        - Django will as for a default value
+            - use '-' which will allow resolve the default value need
+
+RUNNING MIGRATION
+
+When ready to start migration:
+    - python manage.py migrate
+
+NOTE: could not resolve MYSql issues
+    - installed PostgresQL
+    - reverted Python back to 3.10
+        - 3.12 was incompatible
+
+RUNNING CUSTOM SQL
+
+- example of custom sql migrations
+    - python manage.py makemigrations store --empty
+    - in the new migration file edit operations using migrations.RunSQL
+        - when making custom, always include a DELETE FROM 
+
+operations = [
+        migrations.RunSQL("""
+            INSERT INTO store_collection (title)
+            VALUES ('collection1')
+        """, """
+            DELETE FROM store_collection
+            WHERE title = 'collection1'
+        """)
+        ]
+
+
+
+Also note multiple operations ccan be assigned to a single migration
+
+RANDOM DATA GENERATION
+
+Using mockaroo.com
+

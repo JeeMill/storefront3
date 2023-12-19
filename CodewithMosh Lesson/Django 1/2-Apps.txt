@@ -1,0 +1,24 @@
+Each function in Django is associated with an app
+
+All of the apps can be bundled into a single app to allow easy sharing and management
+
+Avoid bloating apps, which will become monoliths
+
+Bad Organization:
+    products: product, collection, tag
+    customers: customer
+    carts: cart, cartitem
+    orders: order, orderitem
+
+Above is bad, because of dependencies between the different apps
+    - additionally, updates to one app may require changes to another
+    - cart is useless without a product catalog or the ability to place an order
+    - these are highly related functions which should be bundled together
+
+Monolith is still not required, look for middle ground
+
+Better Organization
+
+Store: Product, Collection, Customer, Cart, CartItem, Order, OrderItem
+
+Tags: Tag, TaggedItem
