@@ -22,15 +22,65 @@ if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 
+class ProductImage(models.Model):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images')
+    image = models.ImageField(upload_to='store/images')   # field type validates uploaded images - not storing images in database
+
+    - images will be stored in file not database
+        - the path will be stored in database
+
+migrated changes to database
+
 ADDING IMAGES TO PRODUCTS
 
+- setup to upload images and attach to products
+
+class ProductImageSerializer(serializers.ModelSerializer):
+    def create(self, validated_data):                       # create function required to retrieve product_pk from url
+        product_id = self.context['product_id']
+        return ProductImage.objects.create(product_id=product_id, **validated_data)
+
+    class Meta:
+        model = ProductImage
+        fields = ['id', 'image']
 
 
+class ProductImageViewSet(ModelViewSet):
+    serializer_class = ProductImageSerializer
+    
+    def get_serializer_context(self):                       # context for serializer to retrieve product_pk
+        return {'product_id': self.kwargs['product_pk']}
+
+    def get_queryset(self):
+        return ProductImage.objects.filter(product_id=self.kwargs['product_pk'])
+
+
+- assigned url to nested products router
+products_router.register('images', views.ProductImageViewSet, basename='product-images')
 
 BUILDING AN API TO UPLOAD IMAGES
 
+- want to return images with the list of products
 
 
+
+- update ProductSerializer and place ProductImageSerializer before it
+
+class ProductSerializer(serializers.ModelSerializer):
+    images = ProductImageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Product
+        fields = ['id', 'title', 'images', 'description', 'slug', 'inventory',
+                  'unit_price', 'price_with_tax', 'collection']
+
+    price_with_tax = serializers.SerializerMethodField(
+        method_name='calculate_tax')
+
+
+- modify ProdutViewSet queryset to prevent multiple queries for images
+class ProductViewSet(ModelViewSet):
+    queryset = Product.objects.prefetch_related('images').all()     # prefetching images
 
 
 RETURNING IMAGES FROM THE API
