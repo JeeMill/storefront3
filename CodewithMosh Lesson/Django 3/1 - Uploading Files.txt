@@ -82,6 +82,9 @@ class ProductSerializer(serializers.ModelSerializer):
 class ProductViewSet(ModelViewSet):
     queryset = Product.objects.prefetch_related('images').all()     # prefetching images
 
+- had to install pillow to manage images (python image processing library)
+pipenv install pillow
+
 
 RETURNING IMAGES FROM THE API
 
@@ -91,18 +94,123 @@ RETURNING IMAGES FROM THE API
 VALIDATING UPLOADED FILES
 
 
+- need to validate size of files
+from django.core.exceptions import ValidationError
+
+def validate_file_size(file):
+    max_size_kb = 50
+
+    if file.size > max_size_kb *1024:
+        raise ValidationError(f'Files cannot be larger than {max_size_kb}KB!')
+
+
+- added function to validators on image field in the model
+image = models.ImageField(
+        upload_to='store/images',
+        validators=[validate_file_size]
+        )   # field type validates uploaded images - not storing images in database
+
+- more types of restrictions necessary if file fields used on project
+    - can restrict things like filetype
+
+    eg. from django.core.validators import FileExtensionValidator
+
+        validators=[FileExtensionValidator(allowed_extensions=['pdf])]
 
 
 
 SETTING UP THE CLIENT APP
 
+- opened a new instance of VSCODE to run nodejs
+    - nodejs is used for front end - client side
 
+dropped the Client App file from storefront3 resources - 2 into VScode
 
+update npm - i'm using an older version of nodejs - update later
 
+syntax
+
+- check version: node --version
+
+- build dependencies: npm install  
+
+- run server: npm start
+
+Client app upload photo function is setup
 
 ENABLING CORS
 
+- client app cannot reach server yet
+    - CORS : Cross-origin Resource Sharing
 
+port 8001 server trying to reach port 8000
+
+- will use django cors headers https://github.com/adamchainz/django-cors-headers
+
+    pipenv install django-cors-headers
+
+    - install in local apps
+        'corsheaders',
+    
+    - install middleware at top of stack
+        'corsheaders.middleware.CorsMiddleware',
+
+    - setup allowed origins
+        CORS_ALLOWED_ORIGINS = [
+            'http://127.0.0.1:8001' # numerical representation of local host - port 8001
+        ]
+
+
+- adjusted validation limit to 500 kb
+
+
+- required troubleshooting
+    - alot of fidgeting with npm
+    index.html is fine
+
+    - had to set CORS Allowed to localhost
+
+    - then picture size was too big, increased to 10000
 
 
 MANAGING IMAGES IN THE ADMIN
+
+- small change - requires some html
+
+class ProductImageInline(admin.TabularInline):
+    model = models.ProductImage
+    readonly_fields = ['thumbnail']
+
+    def thumbnail(self, instance):
+        if instance.image.name != '':
+            return format_html(f'<img src="{instance.image.url}" class="thumbnail" />')     # return html image thumbnail
+        return ''
+
+
+@admin.register(models.Product)
+class ProductAdmin(admin.ModelAdmin):
+    autocomplete_fields = ['collection']
+    prepopulated_fields = {
+        'slug': ['title']
+    }
+    actions = ['clear_inventory']
+    inlines = [ProductImageInline]          # added inline  (store app)
+
+class CustomProductAdmin(ProductAdmin):
+    inlines = [TagInline, ProductImageInline]       # add inline (core app)
+
+
+- using html and css to present thumbnail on admin page
+
+
+- in store/static.styles.css    # namespace to prevent overwriting if another app uses the same name
+
+.thumbnail {
+    width: 100px;
+    height: 100px;
+}
+
+    class Media:
+        css = {
+            'all': ['store/styles.css']   # all refers to all media types (could be 'screen', 'print', etc.)
+        }
