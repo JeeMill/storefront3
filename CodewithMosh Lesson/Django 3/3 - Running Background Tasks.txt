@@ -1,0 +1,65 @@
+INTRODUCTION TO Background Tasks
+
+- background processes allow the main application to continue to do the main/most important tasks
+
+- allows workers to execute tasks in background
+    - tasks are sent to queue, and workers execute and free themselves up afterwards
+
+
+NOTE: CELERY DOES NOT SUPPORT WINDOWS
+
+
+MESSAGE BROKERS
+
+- message brokers are also required
+    - they relay message between Django application and Celery workers
+
+    -types of brokers
+        Redis(in-memory data store)
+        RabbitMQ(real, enterprise-grade broker) - more powerful, but also more complex
+
+- using redis for this course - will also be used for Caching
+    - easy to start using
+
+
+INSTALLING REDIS
+
+- best way to install is using docker
+
+    # syntax: -d(detached -meaing background), -p(to specify port mapping), localhost:docker container
+    docker run -d -p 6379:6379 redis
+
+- redis will be run inside a docker container
+    - a single process on computer - contains a virtual environment for redis
+    - localhost will port will be mapped to port on the docker container
+
+docker ps
+
+- docker container is running - below console output:
+
+CONTAINER ID   IMAGE     COMMAND                  CREATED          STATUS          PORTS                    NAMES
+89c9d2704784   redis     "docker-entrypoint.s…"   14 seconds ago   Up 12 seconds   0.0.0.0:6379->6379/tcp   serene_bouman  
+
+
+
+CELERY AND WINDOWS
+
+
+
+
+SETTING UP CELERY
+
+
+
+
+CREATING AND EXECUTING TASKS
+
+
+
+
+SCHEDULING PERIODIC TASKS
+
+
+
+
+MONITORING CELERY TASKS
