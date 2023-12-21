@@ -1,0 +1,109 @@
+SETTING UP FAKE SMTP SERVER
+
+-using smtp4dev
+
+installed docker from website
+
+-command
+docker run --rm -it -p 3000:80 -p 2525:25 rnwood/smtp4dev
+
+-docker server lives on localhost:3000
+
+
+CONFIGURING THE EMAIL BACKEND
+
+-backends:
+    SMTP(default)
+    Console
+    File    - writing to file
+    Locmem  - writing to local memory
+    Dummy
+
+- in settings
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'   # replace smtp with console to use console 
+EMAIL_HOST = 'localhost'
+EMAIL_HOST_USER = ''
+EMAIL_HOST_PASSWORD = ''    # environment variables are used in production
+EMAIL_PORT = 2525
+DEFAUL_FROM_EMAIL = 'from@jeemill.com'
+
+
+SENDING EMAILS
+
+- modified playground views
+
+from django.core.mail import send_mail, mail_admins, BadHeaderError
+from django.shortcuts import render
+
+
+def say_hello(request):
+    try:
+        send_mail('subject', 'message', 'info@jeemill.com', ['other@mail.com'])
+    except BadHeaderError:
+        pass
+    return render(request, 'hello.html', {'name': 'Mosh'})
+
+
+
+- using mail_admins
+    - add ADMINS to settings
+
+    ADMINS = [
+    ('Jee', 'admin@jee.com')
+]
+
+def say_hello(request):
+    try:
+        mail_admins('subject', 'message', html_message='trying mail_admins method')
+
+
+-mail_admins is able to support html content
+
+
+ATTACHING FILES
+
+- attaching files requires the more thorough method
+    - use EmailMessage class
+
+from django.core.mail import EmailMessage, BadHeaderError
+from django.shortcuts import render
+
+
+def say_hello(request):
+    try:
+        message = EmailMessage('subject', 'message', 'from@jee.com', ['guess@mail.com'])
+        message.attach_file('playground/static/images/toyota.jpg')
+        message.send()
+    except BadHeaderError:
+        pass
+    return render(request, 'hello.html', {'name': 'Mosh'})
+
+- presents attachments which can be downloaded from the browser
+
+
+SENDING TEMPLATED EMAILS
+
+pipenv install django-templated-mail
+
+- new folder for email templates
+    playground/templates/emails/hello.html
+
+    - setup html to build the email template 
+
+
+from django.core.mail import EmailMessage, BadHeaderError
+from django.shortcuts import render
+from templated_mail.mail import BaseEmailMessage            # using the BaseEmailMessage class
+
+
+def say_hello(request):
+    try:
+        message = BaseEmailMessage(
+            template_name='emails/hello.html',          # template
+            context={'name': 'JeeMill'}                 # context passed to html reference of 'name'
+        )
+        message.send(['other@mail.com'])
+    except BadHeaderError:
+        pass
+    return render(request, 'hello.html', {'name': 'Mosh'})
